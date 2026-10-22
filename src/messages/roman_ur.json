@@ -7,7 +7,8 @@
     "ctaPrimary": "Instructor Talash Karein",
     "ctaSecondary": "Instructor Banein",
     "ctaLearner": "Learner ke tor par register karein",
-    "ctaInstructor": "Instructor ke tor par register karein"
+    "ctaInstructor": "Instructor ke tor par register karein",
+    "ctaVendor": "Vendor ke tor par register karein"
   },
   "Common": {
     "language": "Zaban",
@@ -35,6 +36,7 @@
     "empty": "Aapki koi bookings maujood nahi hain.",
     "cancel": "Cancel karein",
     "confirmCancel": "Cancel ki tasdeeq karein",
+    "cancel": "Cancel karein",
     "cancelSuccess": "Booking cancel ho gai aur refund process ho gaya.",
     "cancelFailed": "Booking cancel karne mein nakaami",
     "colWhen": "Kab",
@@ -47,8 +49,7 @@
     "unknownInstructor": "Unknown",
     "noWallet": "Aapke account ke liye koi wallet nahi mila.",
     "abort": "Cancel na karein"
-  }
-  ,
+  },
   "Earnings": {
     "title": "Aamdani",
     "pending": "Pending (escrow mein)",

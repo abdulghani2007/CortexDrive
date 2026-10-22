@@ -12,9 +12,11 @@ type AuthRole = 'learner' | 'instructor' | 'vendor';
 export default function AuthPanel({
   mode = 'signin',
   admin = false,
+  initialRole = 'learner',
 }: {
   mode?: Mode;
   admin?: boolean;
+  initialRole?: AuthRole;
 }) {
   const supabase = getSupabaseBrowserClient();
   const router = useRouter();
@@ -24,7 +26,7 @@ export default function AuthPanel({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<AuthRole>('learner');
+  const [role, setRole] = useState<AuthRole>(initialRole);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
