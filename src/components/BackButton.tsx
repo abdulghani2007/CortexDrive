@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
@@ -12,7 +12,7 @@ export default function BackButton() {
     if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back();
     } else {
-      router.push(`/${locale}/dashboard`);
+      router.push(`/${locale}`);
     }
   }
 
