@@ -1,5 +1,13 @@
 import AuthPanel from '@/components/auth/AuthPanel';
+import BackButton from '@/components/BackButton';
 
-export default function SignInPage(){
-  return <div className="min-h-screen bg-slate-900 text-slate-100 p-8"><AuthPanel/></div>
+export default function SignInPage() {
+  return (
+    <div className="min-h-screen bg-slate-900 text-slate-100 p-8">
+      <div className="max-w-md mx-auto">
+        <BackButton />
+        <AuthPanel />
+      </div>
+    </div>
+  );
 }
