@@ -7,7 +7,8 @@
     "ctaPrimary": "Find an Instructor",
     "ctaSecondary": "Become an Instructor",
     "ctaLearner": "Register as a Learner",
-    "ctaInstructor": "Register as an Instructor"
+    "ctaInstructor": "Register as an Instructor",
+    "ctaVendor": "Register as a Vendor"
   },
   "Common": {
     "language": "Language",
@@ -47,8 +48,7 @@
     "unknownInstructor": "Unknown",
     "noWallet": "No wallet found for your account.",
     "abort": "Don't cancel"
-  }
-  ,
+  },
   "Earnings": {
     "title": "Earnings",
     "pending": "Pending (in escrow)",
