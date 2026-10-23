@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { createBrowserSupabaseClient } from '@/lib/supabase/client';
+import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 
 export default function OnboardingWizard() {
-  const supabase = createBrowserSupabaseClient();
+  const supabase = getSupabaseBrowserClient();
   const router = useRouter();
   const [fullName, setFullName] = useState('');
   const [city, setCity] = useState('');

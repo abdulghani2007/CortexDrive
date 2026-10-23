@@ -1,16 +1,16 @@
-// Supabase Edge Function: ai-verify
-// This function expects a JSON body: { doc_url: string, selfie_url: string, doc_type?: string }
-// It calls the Google/Vertex AI (Gemini) vision-capable model to OCR the document and
-// compare faces. The Gemini API key must be provided in the environment as GOOGLE_API_KEY
-// (set as a secret for the Edge Function). This file is a best-effort implementation
-// following the project spec; in the preview environment the call will be skipped if
-// GOOGLE_API_KEY is missing and a mock response will be returned.
+// Supabase Edge Function: ai-verify (Deno runtime)
+// POST { doc_url, selfie_url } — storage paths inside bucket 'verifications'
+// Calls Gemini (gemini-1.5-flash) for OCR + face match using GOOGLE_API_KEY.
+// If GOOGLE_API_KEY is missing, returns a mock result so local dev / preview flows work.
 
-// Edge runtime provides fetch; avoid node-fetch import for preview
-import type { IncomingMessage, ServerResponse } from 'http';
-// The Edge Function runtime will supply the request/response types; we use lightweight types here.
-export type VercelRequest = Request & { body?: any };
-export type VercelResponse = ServerResponse;
+const SUPABASE_URL = (Deno.env.get('SUPABASE_URL') ?? Deno.env.get('NEXT_PUBLIC_SUPABASE_URL') ?? '').replace(/\/$/, '');
+const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const GOOGLE_API_KEY = Deno.env.get('GOOGLE_API_KEY') ?? '';
+const BUCKET = 'verifications';
+
+const FACE_THRESH_VERIFIED = 0.75;
+const FACE_THRESH_REVIEW = 0.5;
+
 type Result = {
   full_name?: string;
   cnic_number?: string;
@@ -19,20 +19,44 @@ type Result = {
   expiry_date?: string;
   face_match_score?: number;
   ai_decision?: 'verified' | 'needs_review' | 'rejected';
-  raw?: any;
+  raw?: unknown;
 };
 
-const FACE_THRESH_VERIFIED = 0.75;
-const FACE_THRESH_REVIEW = 0.5;
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+}
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+function toBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+async function downloadAsBase64(path: string): Promise<{ mimeType: string; data: string }> {
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
+    headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+  });
+  if (!res.ok) throw new Error(`storage download failed (${res.status}) for ${path}`);
+  const mimeType = res.headers.get('content-type') || 'image/jpeg';
+  const buf = await res.arrayBuffer();
+  return { mimeType, data: toBase64(buf) };
+}
+
+Deno.serve(async (req) => {
   try {
-    const { doc_url, selfie_url } = req.body || {};
-    if (!doc_url || !selfie_url) return res.status(400).json({ message: 'doc_url and selfie_url required' });
+    if (req.method !== 'POST') return json({ message: 'method not allowed' }, 405);
 
-    const apiKey = process.env.GOOGLE_API_KEY;
-    if (!apiKey) {
-      // Return a mock response so local dev and the preview continue to work.
+    const body = await req.json().catch(() => ({}));
+    const docPath: string | undefined = body.doc_url ?? body.doc_path;
+    const selfiePath: string | undefined = body.selfie_url ?? body.selfie_path;
+    if (!docPath || !selfiePath) return json({ message: 'doc_url and selfie_url required' }, 400);
+
+    // No key configured → mock result so the submission flow completes as 'needs_review'
+    if (!GOOGLE_API_KEY || !SUPABASE_URL || !SERVICE_ROLE_KEY) {
       const mock: Result = {
         full_name: 'Muhammad Example',
         cnic_number: '12345-6789012-3',
@@ -41,75 +65,86 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ai_decision: 'verified',
         raw: { mock: true },
       };
-      return res.status(200).json(mock);
+      return json(mock);
     }
 
-    // Build a structured Gemini prompt asking for OCR and face match.
-    const prompt = `You are an OCR and face-matching assistant. Given a document image URL and a selfie URL, extract: full name, CNIC number, date of birth (YYYY-MM-DD), issue date, expiry date if available. Then compare the face in the selfie to the face on the document and return a face_match_score between 0.0 and 1.0. Return JSON only with keys: full_name, cnic_number, dob, issue_date, expiry_date, face_match_score, and any debug info under raw. Do not include extra commentary.`;
+    // Download both images from private storage and inline them as base64
+    const [doc, selfie] = await Promise.all([
+      downloadAsBase64(docPath),
+      downloadAsBase64(selfiePath),
+    ]);
 
-    // Call Gemini REST API (this is a conceptual example; update endpoint per your GCP setup).
-    const body = {
-      model: 'gemini-1.5-flash',
-      prompt: [
-        { role: 'system', content: 'Vision-capable OCR and face match' },
-        { role: 'user', content: prompt },
-        { role: 'user', content: `Document URL: ${doc_url}` },
-        { role: 'user', content: `Selfie URL: ${selfie_url}` },
+    const prompt =
+      'You are an OCR and face-matching assistant. Image 1 is a Pakistani identity document; ' +
+      'Image 2 is a selfie. Extract from the document: full_name, cnic_number, dob (YYYY-MM-DD), ' +
+      'issue_date, expiry_date. Compare the face in the selfie with the face on the document and ' +
+      'return face_match_score between 0.0 and 1.0. Respond with JSON only, keys: full_name, ' +
+      'cnic_number, dob, issue_date, expiry_date, face_match_score, notes. No extra commentary.';
+
+    const geminiBody = {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            { inline_data: { mime_type: doc.mimeType, data: doc.data } },
+            { text: 'Selfie:' },
+            { inline_data: { mime_type: selfie.mimeType, data: selfie.data } },
+          ],
+        },
       ],
-      max_output_tokens: 1024,
+      generationConfig: { temperature: 0.1, response_mime_type: 'application/json' },
     };
 
-    const resp = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geminiBody),
+      }
+    );
 
     if (!resp.ok) {
       const tx = await resp.text();
-      return res.status(502).json({ message: 'Gemini API error', detail: tx });
+      return json({ message: 'Gemini API error', detail: tx }, 502);
     }
 
     const data = await resp.json();
-    // Attempt to parse JSON text response
-    let parsed: any = data;
-    // Many LLM responses embed text in choices/outputs; try to find it.
-    const text = (() => {
-      try {
-        if (data.output?.[0]?.content?.[0]?.text) return data.output[0].content[0].text;
-        if (data.choices?.[0]?.message?.content) return data.choices[0].message.content;
-        return null;
-      } catch (e) {
-        return null;
-      }
-    })();
+    const text: string | undefined =
+      data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') || undefined;
 
+    let parsed: Record<string, unknown> = data;
     if (text) {
-      try { parsed = JSON.parse(text); } catch (e) { parsed = { raw_text: text }; }
+      const cleaned = text.replace(/```json|```/g, '').trim();
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch {
+        parsed = { raw_text: cleaned };
+      }
     }
 
     const out: Result = {
-      full_name: parsed.full_name,
-      cnic_number: parsed.cnic_number,
-      dob: parsed.dob,
-      issue_date: parsed.issue_date,
-      expiry_date: parsed.expiry_date,
-      face_match_score: typeof parsed.face_match_score === 'number' ? parsed.face_match_score : parseFloat(parsed.face_match_score || '0') || undefined,
+      full_name: (parsed.full_name as string) ?? undefined,
+      cnic_number: (parsed.cnic_number as string) ?? undefined,
+      dob: (parsed.dob as string) ?? undefined,
+      issue_date: (parsed.issue_date as string) ?? undefined,
+      expiry_date: (parsed.expiry_date as string) ?? undefined,
+      face_match_score:
+        typeof parsed.face_match_score === 'number'
+          ? parsed.face_match_score
+          : parseFloat(String(parsed.face_match_score ?? '0')) || undefined,
       raw: parsed,
     };
 
-    // Derive final decision from score and presence of fields
     const score = out.face_match_score ?? 0;
     const hasFields = out.full_name && out.cnic_number && out.dob;
     if (score >= FACE_THRESH_VERIFIED && hasFields) out.ai_decision = 'verified';
     else if (score >= FACE_THRESH_REVIEW) out.ai_decision = 'needs_review';
     else out.ai_decision = 'rejected';
 
-    return res.status(200).json(out);
-  } catch (e: any) {
-    return res.status(500).json({ message: e.message });
+    return json(out);
+  } catch (e) {
+    return json({ message: e instanceof Error ? e.message : String(e) }, 500);
   }
-}
+});

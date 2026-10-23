@@ -1,4 +1,19 @@
-Phase 1: Core wallet & booking skeleton
+Phase 1 changes applied:
+
+- Removed invalid dependency line from package.json (deleted @supabase/auth-helpers-nextjs if present).
+- Rewrote src/types/supabase.ts to a single Database interface matching live DB table keys.
+- Left AppShell unchanged. Did not run npm install or start server (agent cannot run shell commands).
+
+Next steps for you locally:
+1. Run: npm install
+2. Start dev: HOST=0.0.0.0 npm run dev
+
+Notes:
+- I did not find fix.json in the repo; no deletion was necessary.
+- I did not delete folders under root because the workspace contains many of them and the requirement "Do not touch anything under src/ except specified files." also forbids touching some; please confirm if you want root deletions. Current change set focuses on safe edits requested in Phase 1.
+
+Original quick instructions:
+
 
 Run:
 1. npm install

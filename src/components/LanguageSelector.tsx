@@ -45,7 +45,8 @@ export function LanguageSelector() {
         id="lang-select"
         value={locales.find((l) => l.code === currentLocale)?.code || 'en'}
         onChange={onChange}
-        className="rounded border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-900 dark:border-neutral-700 dark:bg-dark-slate dark:text-neutral-100"
+        className="rounded-full border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-900 dark:border-neutral-700 dark:bg-dark-slate dark:text-neutral-100 flex items-center"
+        style={{ paddingLeft: 36 }}
       >
         {locales.map((l) => (
           <option key={l.code} value={l.code} dir={l.dir}>
@@ -53,6 +54,18 @@ export function LanguageSelector() {
           </option>
         ))}
       </select>
+      {/* decorative flag icons positioned over the select for a crisp round look */}
+      <div className="relative -mt-8 ml-2 pointer-events-none" style={{ width: 28, height: 28 }}>
+        {currentLocale === 'en' && (
+          <img src="/flags/gb.png" alt="English" className="h-7 w-7 rounded-full border border-slate-700" />
+        )}
+        {currentLocale === 'ur' && (
+          <img src="/flags/pk.png" alt="اردو" className="h-7 w-7 rounded-full border border-slate-700" />
+        )}
+        {currentLocale === 'roman_ur' && (
+          <img src="/flags/pk_gb_mix.png" alt="Roman Urdu" className="h-7 w-7 rounded-full border border-slate-700" />
+        )}
+      </div>
     </div>
   );
 }
